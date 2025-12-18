@@ -1,17 +1,57 @@
-import dotenv from 'dotenv'
-dotenv.config()
+import dotenv from "dotenv";
+dotenv.config();
 
-import express from 'express'
-import mongoose from 'mongoose'
-import cors from 'cors'
-import connectDB from './config/dbConnection.js'
+import express from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
 
+import connectDB from "./config/dbConnection.js";
+import allowedOrigins from "./config/allowedOrigins.js";
+import authRoutes from "./routes/user.routes.js";
+import errorHandler from "./middleware/errorHandler.js";
+// sardarammad6_db_user
+// s1I5MH373PcYo3b4
+const app = express();
 
-const app = express()
-app.use(express.json())
-// connectDB()
-const PORT = process.env.PORT || 3500
+// ---------- Middleware ----------
+app.use(express.json());
+app.use(cookieParser());
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
-})
+// ---------- CORS ----------
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow requests with no origin (Postman, curl, mobile apps)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // REQUIRED for HttpOnly cookies
+  })
+);
+
+// ---------- Routes ----------
+app.use("/auth", authRoutes);
+
+app.use(errorHandler); // Custom error handler middleware
+
+const PORT = process.env.PORT || 3500;
+
+// ---------- Start Server ----------
+async function startServer() {
+  try {
+    await connectDB();
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  }
+}
+
+startServer();
