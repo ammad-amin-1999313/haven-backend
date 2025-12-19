@@ -8,15 +8,22 @@ import {
   refreshCookieOptions,
 } from "../utils/tokens.js";
 
-function toSafeUser(user) {
+export const toSafeUser = (user) => {
   return {
-    id: user._id.toString(),
+    id: user._id,
     firstName: user.firstName,
     lastName: user.lastName,
     email: user.email,
     role: user.role,
+    // Add this line to format the date
+    joinedDate: user.createdAt 
+      ? new Date(user.createdAt).toLocaleDateString('en-US', {
+          month: 'short',
+          year: 'numeric'
+        }) 
+      : "Recent"
   };
-}
+};
 
 // SIGNUP
 export async function signupService({ firstName, lastName, email, password, role }) {
@@ -81,6 +88,10 @@ export async function loginService({ email, password, role }) {
 
   const ok = await argon2.verify(user.passwordHash, password);
   if (!ok) {
+    console.log("LOGIN INPUT:", { email, role,password });
+    // console.log("FOUND USER?", !!user);
+    // if (user) console.log("USER EMAIL/ROLE:", user.email, user.role);
+
     throw new AppError("Invalid credentials", 401, "INVALID_CREDENTIALS");
   }
 
