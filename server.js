@@ -8,6 +8,7 @@ import cookieParser from "cookie-parser";
 import connectDB from "./config/dbConnection.js";
 import allowedOrigins from "./config/allowedOrigins.js";
 import authRoutes from "./routes/user.routes.js";
+import hotelRoutes from "./routes/hotel.routes.js";
 import errorHandler from "./middleware/errorHandler.js";
 // sardarammad6_db_user
 // s1I5MH373PcYo3b4
@@ -36,7 +37,7 @@ app.use(
 
 // ---------- Routes ----------
 app.use("/auth", authRoutes);
-
+app.use("/api/hotels", hotelRoutes);
 app.use(errorHandler); // Custom error handler middleware
 
 const PORT = process.env.PORT || 3500;

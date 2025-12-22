@@ -15,7 +15,15 @@ const userSchema = new mongoose.Schema(
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/, "Invalid email"],
     },
 
-    // store HASHED password only
+    // E.164 recommended: +[country][number]
+    phone: {
+      type: String,
+      trim: true,
+      default: null,
+      match: [/^[\d\s()+-]{8,20}$/, "Invalid phone number"],
+      index: true,
+    },
+
     passwordHash: { type: String, required: true, select: false },
 
     role: {

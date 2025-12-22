@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import AppError from "../utils/AppError.js";
 
-export default function requireAuth(req, res, next) {
+export  function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -11,7 +11,7 @@ export default function requireAuth(req, res, next) {
   const token = authHeader.split(" ")[1];
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    const payload = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
     // payload has: sub (userId), role, iat, exp
     req.user = {

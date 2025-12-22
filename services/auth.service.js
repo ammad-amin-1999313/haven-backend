@@ -15,6 +15,7 @@ export const toSafeUser = (user) => {
     lastName: user.lastName,
     email: user.email,
     role: user.role,
+    phone: user.phone,
     // Add this line to format the date
     joinedDate: user.createdAt 
       ? new Date(user.createdAt).toLocaleDateString('en-US', {
