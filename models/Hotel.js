@@ -10,6 +10,8 @@ const HotelSchema = new mongoose.Schema(
         description: { type: String },
         amenities: [String],
         rating: { type: Number, min: 0, max: 5 },
+        startingPricePerNight: { type: Number, required: true },
+        currency: { type: String, default: "USD" }
     },
     { timestamps: true }
 );
