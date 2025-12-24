@@ -13,8 +13,8 @@ router.post("/add-hotel", requireAuth, requireRole("owner"), createHotel)
 router.get("/", getHotels)
 // Public: Get single hotel details
 router.get("/hotel-details/:id", getSingleHotel)
-// Owner-only: Get Own hootels data
-router.get("/owner-hotels/:ownerId", requireAuth, requireRole("owner"), getOwnerHotels)
+// Owner-only: Get Own hotels data
+router.get("/owner-hotels", requireAuth, requireRole("owner"), getOwnerHotels)
 // Owner-only: edit hotel data
 router.patch("/edit-hotel/:id", requireAuth, requireRole("owner"), updateHotelData)
 

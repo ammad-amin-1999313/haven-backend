@@ -1,4 +1,5 @@
 import Hotel from "../models/Hotel.js";
+import RoomType from "../models/RoomType.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 import { paginate } from "../utils/pagination.js";
 import mongoose from "mongoose";
@@ -7,52 +8,206 @@ import mongoose from "mongoose";
 // @desc Create a new hotel
 // @access Owner only
 export const createHotel = asyncHandler(async (req, res) => {
-    const ownerId = req.user.id; // from requireAuth middleware
-    if (!ownerId) {
-        return res.status(401).json({ message: "Unauthorized" })
-    }
-    const { name, city, country, images, description, amenities, rating, startingPricePerNight, currency } = req.body;
-    const hotel = new Hotel({
+    const ownerId = req.user.id;
+    if (!ownerId) return res.status(401).json({ message: "Unauthorized" });
+
+    const {
         name,
         city,
         country,
-        images,
+        images = [],
         description,
-        amenities,
+        amenities = [],
         rating,
-        ownerId,
-        startingPricePerNight,
-        currency
-    });
-    await hotel.save();
-    return res.status(201).json({ hotel });
-})
+        currency = "USD",
+        roomTypes = [],
+    } = req.body;
+
+    if (!name || !city || !country) {
+        return res.status(400).json({ message: "name, city, country are required" });
+    }
+
+    if (!Array.isArray(roomTypes) || roomTypes.length === 0) {
+        return res.status(400).json({ message: "At least one room type is required" });
+    }
+
+    // ✅ compute starting price from roomTypes (don’t trust frontend field)
+    const startingPricePerNight = Math.min(...roomTypes.map((r) => Number(r.pricePerNight)));
+
+    const session = await mongoose.startSession();
+    let createdHotel;
+
+    try {
+        await session.withTransaction(async () => {
+            const [hotel] = await Hotel.create(
+                [
+                    {
+                        ownerId,
+                        name,
+                        city,
+                        country,
+                        images,
+                        description,
+                        amenities,
+                        rating,
+                        startingPricePerNight,
+                        currency,
+                    },
+                ],
+                { session }
+            );
+
+            const roomDocs = roomTypes.map((rt) => ({
+                hotelId: hotel._id,
+                title: rt.title,
+                capacityAdults: rt.capacityAdults,
+                quantity: rt.quantity,
+                pricePerNight: rt.pricePerNight,
+                amenities: rt.amenities || [],
+                images: rt.images || [],
+            }));
+
+            await RoomType.insertMany(roomDocs, { session });
+            createdHotel = hotel;
+        });
+
+        return res.status(201).json({
+            success: true,
+            hotel: createdHotel,
+        });
+    } catch (err) {
+        return res.status(400).json({ success: false, message: err.message });
+    } finally {
+        session.endSession();
+    }
+});
+
+// -----------
 // @route Patch /api/hotels/edit-hotel/:${id}
 // @desc update hotel details
 // @access Owner
 export const updateHotelData = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const updateData = req.body;
-    const hotel = await Hotel.findById(id);
-    if (!hotel) {
-        return res.status(404).json({ message: "Hotel not found" });
+    const { id: hotelId } = req.params;
+    const ownerId = req.user.id;
+
+    if (!mongoose.Types.ObjectId.isValid(hotelId)) {
+        return res.status(400).json({ message: "Invalid Hotel ID format" });
     }
-    // 3. Update the data
-    // { new: true } returns the updated document
-    // { runValidators: true } ensures the new data follows your Schema rules
-    const updatedHotel = await Hotel.findByIdAndUpdate(
-        id,
-        updateData,
-        { new: true, runValidators: true }
-    );
 
-    return res.status(200).json({
-        success: true,
-        message: "Hotel updated successfully",
-        data: updatedHotel
-    });
+    const { hotel: hotelData, roomTypes } = req.body;
 
-})
+    if (!hotelData || !Array.isArray(roomTypes)) {
+        return res.status(400).json({
+            message: "hotel data and roomTypes array are required",
+        });
+    }
+
+    const session = await mongoose.startSession();
+
+    try {
+        await session.withTransaction(async () => {
+            // 1️⃣ Fetch & ownership check
+            const hotel = await Hotel.findById(hotelId).session(session);
+            if (!hotel) throw new Error("Hotel not found");
+
+            if (hotel.ownerId.toString() !== ownerId) {
+                throw new Error("Forbidden: not your hotel");
+            }
+
+            // Prevent ownership tampering
+            delete hotelData.ownerId;
+
+            // 2️⃣ Update hotel fields
+            await Hotel.findByIdAndUpdate(
+                hotelId,
+                hotelData,
+                { runValidators: true, session }
+            );
+
+            // 3️⃣ Sync room types
+            const existingRoomTypes = await RoomType.find({ hotelId }).session(session);
+            const existingIds = existingRoomTypes.map((rt) => rt._id.toString());
+
+            const incomingIds = roomTypes
+                .filter((rt) => rt._id)
+                .map((rt) => rt._id.toString());
+
+            // A) UPDATE existing room types
+            for (const rt of roomTypes.filter((r) => r._id)) {
+                if (!mongoose.Types.ObjectId.isValid(rt._id)) {
+                    throw new Error("Invalid RoomType ID");
+                }
+
+                await RoomType.findOneAndUpdate(
+                    { _id: rt._id, hotelId },
+                    {
+                        title: rt.title,
+                        capacityAdults: rt.capacityAdults,
+                        quantity: rt.quantity,
+                        pricePerNight: rt.pricePerNight,
+                    },
+                    { runValidators: true, session }
+                );
+            }
+
+            // B) CREATE new room types
+            const newRoomTypes = roomTypes
+                .filter((rt) => !rt._id)
+                .map((rt) => ({
+                    hotelId,
+                    title: rt.title,
+                    capacityAdults: rt.capacityAdults,
+                    quantity: rt.quantity,
+                    pricePerNight: rt.pricePerNight,
+                }));
+
+            if (newRoomTypes.length) {
+                await RoomType.insertMany(newRoomTypes, { session });
+            }
+
+            // C) DELETE removed room types
+            const toDelete = existingIds.filter(
+                (id) => !incomingIds.includes(id)
+            );
+
+            if (toDelete.length) {
+                await RoomType.deleteMany(
+                    { hotelId, _id: { $in: toDelete } },
+                    { session }
+                );
+            }
+
+            // 4️⃣ Recalculate startingPricePerNight
+            const prices = await RoomType.find({ hotelId })
+                .select("pricePerNight")
+                .session(session);
+
+            if (!prices.length) {
+                throw new Error("Hotel must have at least one room type");
+            }
+
+            const minPrice = Math.min(...prices.map((p) => p.pricePerNight));
+
+            await Hotel.findByIdAndUpdate(
+                hotelId,
+                { startingPricePerNight: minPrice },
+                { session }
+            );
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Hotel and room types updated successfully",
+        });
+    } catch (err) {
+        return res.status(400).json({
+            success: false,
+            message: err.message,
+        });
+    } finally {
+        session.endSession();
+    }
+});
 // @route GET /api/hotels
 // @desc Get all hotels with optional filters
 // @access Public
@@ -123,39 +278,39 @@ export const getHotels = asyncHandler(async (req, res) => {
 // @desc Get single hotel details on the basic of id
 // @access Public
 export const getSingleHotel = asyncHandler(async (req, res) => {
-    const { id } = req.params
-    const hotel = await Hotel.findById(id)
+    const { id } = req.params;
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({ message: "Invalid Hotel ID format" });
     }
+
+    const hotel = await Hotel.findById(id);
     if (!hotel) {
         return res.status(404).json({ message: "Hotel not found" });
     }
-    return res.status(200).json(hotel)
-})
+
+    const roomTypes = await RoomType.find({ hotelId: id }).sort({ createdAt: 1 });
+
+    return res.status(200).json({
+        hotel,
+        roomTypes,
+    });
+});
+
 
 // @route GET /api/hotels/owner-hotels/{id}
 // @desc Get hotels on the basic of ownerId
 // @access Role:Owner
 export const getOwnerHotels = asyncHandler(async (req, res) => {
-    const { ownerId } = req.params;
+    const ownerId = req.user.id;
 
-    if (!mongoose.Types.ObjectId.isValid(ownerId)) {
-        return res.status(400).json({ message: "Invalid Owner ID format" });
-    }
+    const hotels = await Hotel.find({ ownerId }).sort({ createdAt: -1 });
 
-    const hotels = await Hotel.find({ ownerId: ownerId });
-
-    if (!hotels || hotels.length === 0) {
-        return res.status(404).json({
-            message: "No hotels found for this owner",
-            hotels: []
-        });
-    }
     return res.status(200).json({
         success: true,
         count: hotels.length,
-        hotels
+        hotels,
     });
 });
 
+               
