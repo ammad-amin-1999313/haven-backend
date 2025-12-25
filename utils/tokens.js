@@ -29,3 +29,14 @@ export function refreshCookieOptions() {
         maxAge: 7 * 24 * 60 * 60 * 1000,
     }
 }
+// export function refreshCookieOptions() {
+//   const isProd = process.env.NODE_ENV === "production";
+
+//   return {
+//     httpOnly: true,
+//     secure: isProd,                 // ✅ false locally, true in prod
+//     sameSite: isProd ? "none" : "lax", // ✅ supports cross-site prod deployments
+//     path: "/",                      // ✅ IMPORTANT (so middleware can read)
+//     maxAge: 7 * 24 * 60 * 60 * 1000,
+//   };
+// }
