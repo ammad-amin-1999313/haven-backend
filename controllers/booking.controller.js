@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import asyncHandler from "../middleware/asyncHandler.js";
 import Booking from "../models/Booking.js";
 import Hotel from "../models/Hotel.js";
@@ -29,7 +30,7 @@ export const createBookingRequest = asyncHandler(async (req, res) => {
     roomsRequested,
     guestInfo,
   } = req.body;
-
+  
   if (
     !mongoose.Types.ObjectId.isValid(hotelId) ||
     !mongoose.Types.ObjectId.isValid(roomTypeId)
@@ -41,12 +42,10 @@ export const createBookingRequest = asyncHandler(async (req, res) => {
 
   const nights = calcNights(checkIn, checkOut);
   if (!checkIn || !checkOut || nights <= 0) {
-    return res
-      .status(400)
-      .json({
-        success: false,
-        message: "Invalid dates (check-out must be after check-in)",
-      });
+    return res.status(400).json({
+      success: false,
+      message: "Invalid dates (check-out must be after check-in)",
+    });
   }
 
   if (!Number.isFinite(Number(guestsAdults)) || Number(guestsAdults) < 1) {
@@ -54,6 +53,7 @@ export const createBookingRequest = asyncHandler(async (req, res) => {
       .status(400)
       .json({ success: false, message: "guestsAdults must be >= 1" });
   }
+
   if (!Number.isFinite(Number(roomsRequested)) || Number(roomsRequested) < 1) {
     return res
       .status(400)
@@ -62,12 +62,10 @@ export const createBookingRequest = asyncHandler(async (req, res) => {
 
   // validate guest info (from confirm modal)
   if (!guestInfo?.fullName?.trim() || !guestInfo?.phone?.trim()) {
-    return res
-      .status(400)
-      .json({
-        success: false,
-        message: "Guest fullName and phone are required",
-      });
+    return res.status(400).json({
+      success: false,
+      message: "Guest fullName and phone are required",
+    });
   }
 
   const hotel = await Hotel.findById(hotelId);
@@ -76,26 +74,13 @@ export const createBookingRequest = asyncHandler(async (req, res) => {
 
   const roomType = await RoomType.findOne({ _id: roomTypeId, hotelId });
   if (!roomType)
-    return res
-      .status(404)
-      .json({ success: false, message: "Room type not found for this hotel" });
-
-  // ✅ Capacity logic:
-  // guest selects one room type, system chooses roomsRequested accordingly (frontend helps)
-  const capacity = Number(roomType.capacityAdults);
-  const requiredRoomsMin = Math.ceil(Number(guestsAdults) / capacity);
-
-  // Do not allow requesting fewer rooms than needed
-  if (Number(roomsRequested) < requiredRoomsMin) {
-    return res.status(400).json({
+    return res.status(404).json({
       success: false,
-      message: `This room type fits ${capacity} adults. You need at least ${requiredRoomsMin} room(s) for ${guestsAdults} adults.`,
+      message: "Room type not found for this hotel",
     });
-  }
 
   // ✅ Availability check (simple version)
-  // For now, just check declared room quantity.
-  // Later: subtract overlapping approved/pending bookings.
+  // Only checks declared room quantity.
   if (Number(roomsRequested) > Number(roomType.quantity)) {
     return res.status(400).json({
       success: false,
@@ -133,6 +118,7 @@ export const createBookingRequest = asyncHandler(async (req, res) => {
     booking,
   });
 });
+
 
 // @route GET /api/booking/my-bookings
 // desc guest booking list
