@@ -12,7 +12,7 @@ import argon2 from "argon2";
 // @access  Public
 export const signup = asyncHandler(async (req, res) => {
   const result = await signupService(req.body);
-
+  
   // set refresh token cookie
   res.cookie("refreshToken", result.refreshToken, result.cookieOptions);
 

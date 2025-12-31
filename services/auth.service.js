@@ -65,7 +65,7 @@ export async function signupService({ firstName, lastName, email, password, role
   } catch (err) {
     // Unique email error from Mongo
     if (err?.code === 11000) {
-      throw new AppError("Email already exists", 409, "EMAIL_ALREADY_EXISTS");
+      throw new AppError("Email already exists", 409, "EMAIL_ALREADY_EXISTS");      
     }
     throw err;
   }
